@@ -259,14 +259,79 @@ namespace html_entities_decoder
 
 		std::u16string wstring_to_u16string(const std::wstring &input)
 		{
+#if defined(_WIN32) || defined(WIN32)
 			std::u16string converted_string(input.begin(), input.end());
 			return converted_string;
+#else
+			std::u16string converted_string;
+			mbstate_t state{};
+			std::string narrow_string;
+			std::vector<char> vector_char(input.size() * 3, 0);
+
+			char *current_locale = setlocale(LC_ALL, nullptr);
+			bool default_c_local = strcmp(current_locale, "C") == 0;
+			if (default_c_local)
+				setlocale(LC_ALL, "");
+
+			wcstombs(&vector_char[0], input.c_str(), vector_char.size());
+			narrow_string = vector_char.data();
+
+			if (default_c_local)
+			{
+				const char *start_ptr = narrow_string.c_str();
+				const char *end_ptr = start_ptr + input.size();
+				std::vector<char16_t> vector_ch16(input.size() + 1, 0);
+				long long count;
+				for (char16_t *ch16_ptr = &vector_ch16[0]; (count = mbrtoc16(ch16_ptr, start_ptr, end_ptr - start_ptr, &state)); ++ch16_ptr, start_ptr += count)
+					if (count > static_cast<size_t>(-1) / 2) break;
+				converted_string = vector_ch16.data();
+			}
+			else
+			{
+				const char *mbstr = narrow_string.c_str();
+				size_t length = mbsrtowcs(NULL, &mbstr, 0, &state) + 1;
+				std::vector<wchar_t> vector_wchar(length, 0);
+				mbsrtowcs(&vector_wchar[0], &mbstr, vector_wchar.size(), &state);
+				converted_string = reinterpret_cast<char16_t *>(vector_wchar.data());
+			}
+
+			if (default_c_local)
+				setlocale(LC_ALL, "C");
+
+			return converted_string;
+#endif
 		}
 
 		std::wstring u16string_to_wstring(const std::u16string &input)
 		{
+#if defined(_WIN32) || defined(WIN32)
 			std::wstring converted_string(input.begin(), input.end());
 			return converted_string;
+#else
+			std::wstring converted_string;
+			std::string narrow_string;
+			mbstate_t state{};
+
+			for (char16_t ch16 : input)
+			{
+				char u8char[MB_LEN_MAX]{};
+				size_t rc = c16rtomb(u8char, ch16, &state);
+				if (rc != static_cast<size_t>(-1))
+				{
+					narrow_string += std::string{ u8char , rc };
+				}
+			}
+
+			const char *start_ptr = narrow_string.c_str();
+			const char *end_ptr = start_ptr + input.size();
+			std::vector<char16_t> vector_ch16(input.size() + 1, 0);
+			long long count;
+			for (char16_t *ch16_ptr = &vector_ch16[0]; (count = mbrtoc16(ch16_ptr, start_ptr, end_ptr - start_ptr, &state)); ++ch16_ptr, start_ptr += count)
+				if (count > static_cast<size_t>(-1) / 2) break;
+			converted_string = reinterpret_cast<wchar_t *>(vector_ch16.data());
+
+			return converted_string;
+#endif
 		}
 
 		std::u32string string_to_u32string(const std::string &input)
@@ -432,6 +497,7 @@ namespace html_entities_decoder
 
 		std::u32string wstring_to_u32string(const std::wstring &input)
 		{
+#if defined(_WIN32) || defined(WIN32)
 			std::u32string converted_string;
 			mbstate_t state{};
 			for (wchar_t wch : input)	// convert to UTF8 string
@@ -450,10 +516,15 @@ namespace html_entities_decoder
 			}
 
 			return converted_string;
+#else
+			std::u32string converted_string(input.begin(), input.end());
+			return converted_string;
+#endif
 		}
 
 		std::wstring u32string_to_wstring(const std::u32string &input)
 		{
+#if defined(_WIN32) || defined(WIN32)
 			std::wstring converted_string;
 			mbstate_t state{};
 			for (char32_t ch32 : input)
@@ -471,6 +542,10 @@ namespace html_entities_decoder
 			}
 
 			return converted_string;
+#else
+			std::wstring converted_string(input.begin(), input.end());
+			return converted_string;
+#endif
 		}
 
 		std::u32string u16string_to_u32string(const std::u16string &input)
